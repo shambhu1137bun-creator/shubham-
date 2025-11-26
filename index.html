@@ -267,36 +267,38 @@
                 if(mdhType) fields += `<input type="number" placeholder="MDH" id="${proc}_${cat}_mdh">`;
                 if(inputTypes.includes('RVR'))  fields += `<input type="number" placeholder="RVR" id="${proc}_${cat}_rvr">`;
                 if(inputTypes.includes('VIS'))  fields += `<input type="number" placeholder="VIS" id="${proc}_${cat}_vis" step="0.1">`;
+                // Add Ceiling Input
+                fields += `<input type="number" placeholder="Ceil" id="${proc}_${cat}_ceil">`;
                 
                 return `<div class="cat-row"><div class="cat-label">CAT ${cat}</div>${fields}<div class="result" id="${proc}_${cat}_result"></div></div>`;
             }).join('');
             PRECISION_PROC.forEach(proc=>{
                 html += `<div class="calculator" id="${proc.code}Calculator">
                     <h3>${proc.name}</h3>
-                    ${catRows(proc.code, ['DA','DH','RVR'])}
+                    ${catRows(proc.code, ['DA','DH','RVR','CEIL'])}
                 </div>`;
             });
             NONPRECISION_PROC_250.forEach(proc=>{
                 html += `<div class="calculator" id="${proc.code}Calculator">
                     <h3>${proc.name}</h3>
-                    ${catRows(proc.code, ['MDA','MDH','RVR'])}
+                    ${catRows(proc.code, ['MDA','MDH','RVR','CEIL'])}
                 </div>`;
             });
             NONPRECISION_PROC_300.forEach(proc=>{
                 html += `<div class="calculator" id="${proc.code}Calculator">
                     <h3>${proc.name}</h3>
-                    ${catRows(proc.code, ['MDA','MDH','RVR'])}
+                    ${catRows(proc.code, ['MDA','MDH','RVR','CEIL'])}
                 </div>`;
             });
             NONPRECISION_PROC_350.forEach(proc=>{
                 html += `<div class="calculator" id="${proc.code}Calculator">
                     <h3>${proc.name}</h3>
-                    ${catRows(proc.code, ['MDA','MDH','RVR'])}
+                    ${catRows(proc.code, ['MDA','MDH','RVR','CEIL'])}
                 </div>`;
             });
             html += `<div class="calculator" id="circlingCalculator">
                 <h3>Circling</h3>
-                ${catRows('circling', ['MDA','MDH','VIS'])}
+                ${catRows('circling', ['MDA','MDH','VIS','CEIL'])}
             </div>`;
             document.getElementById('calculatorsArea').innerHTML = html;
         }
@@ -373,19 +375,27 @@
             CATS.forEach(cat=>{
                 // Grab raw input for Circling
                 let mdaRaw = 0, mdhRaw = 0, vis = 0;
+                let ceilRaw = 0;
                 // We always calculate standard circling even if hidden, to serve as baseline
                 if(document.getElementById('circlingCalculator')) {
                    mdaRaw = parseFloat(document.getElementById(`circling_${cat}_mda`).value)||0;
                    mdhRaw = parseFloat(document.getElementById(`circling_${cat}_mdh`).value)||0;
                    vis = parseFloat(document.getElementById(`circling_${cat}_vis`).value)||0; 
+                   ceilRaw = parseFloat(document.getElementById(`circling_${cat}_ceil`).value)||0;
                 }
                 
                 const mda = toFeet(mdaRaw);
                 const mdh = toFeet(mdhRaw);
+                
+                // Handle Ceiling
+                let ceil = toFeet(ceilRaw);
+                if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
+                const ceilStr = ceil > 0 ? ` [CEIL] ${ceil}ft` : '';
 
                 const mdhUsed = Math.max(mdh, catMins[cat]);
                 const mdaCalc = roundUpTo10(adElev+mdhUsed);
-                const mdaFinal = Math.max(mda, mdaCalc);
+                // Ensure mda input is rounded if it exceeds calculated
+                const mdaFinal = roundUpTo10(Math.max(mda, mdaCalc));
                 const visFinal = Math.max(vis||0, visDefaults[cat]);
                 
                 // Save baseline
@@ -395,11 +405,11 @@
                     vis: visFinal
                 };
 
-                const res = `MDA: ${mdaFinal}(${mdhUsed}), VIS: ${visFinal}km`;
+                const res = `MDA: ${mdaFinal}(${mdhUsed}), VIS: ${visFinal}km${ceilStr}`;
                 // Only add to summary if checkbox enabled
                 if(document.getElementById('show_circling').checked) {
-                   document.getElementById(`circling_${cat}_result`).innerText = mdaRaw||mdhRaw||vis?res:"";
-                   summary.circling[cat] = mdaRaw||mdhRaw||vis?res:"";
+                   document.getElementById(`circling_${cat}_result`).innerText = mdaRaw||mdhRaw||vis||ceilRaw ? res:"";
+                   summary.circling[cat] = mdaRaw||mdhRaw||vis||ceilRaw ? res:"";
                 }
             });
 
@@ -444,6 +454,12 @@
                     const dhRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_dh`).value)||0;
                     const da = toFeet(daRaw);
                     const dh = toFeet(dhRaw);
+                    const ceilRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_ceil`).value)||0;
+                    
+                    // Handle Ceiling
+                    let ceil = toFeet(ceilRaw);
+                    if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
+                    const ceilStr = ceil > 0 ? ` [CEIL] ${ceil}ft` : '';
                     
                     // --- NEW RVR/VIS DETECTION LOGIC ---
                     const rvrRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_rvr`).value)||0;
@@ -496,9 +512,9 @@
                         visStr = `RVR: ${rvrFinal}m`;
                     }
 
-                    const res = `DA: ${daFinal}(${dhRaised}), ${visStr}`;
-                    document.getElementById(`${proc.code}_${cat}_result`).innerText = daRaw||dhRaw||rvrRaw ? res : '';
-                    summary[proc.code][cat] = daRaw||dhRaw||rvrRaw ? res : '';
+                    const res = `DA: ${daFinal}(${dhRaised}), ${visStr}${ceilStr}`;
+                    document.getElementById(`${proc.code}_${cat}_result`).innerText = daRaw||dhRaw||rvrRaw||ceilRaw ? res : '';
+                    summary[proc.code][cat] = daRaw||dhRaw||rvrRaw||ceilRaw ? res : '';
 
                     // ** NEW: Check for Circling @ **
                     if (daRaw||dhRaw||rvrRaw) {
@@ -517,8 +533,15 @@
                 CATS.forEach(cat=>{
                     const mdaRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_mda`).value)||0;
                     const mdhRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_mdh`).value)||0;
+                    const ceilRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_ceil`).value)||0;
+                    
                     const mda = toFeet(mdaRaw);
                     const mdh = toFeet(mdhRaw);
+                    
+                    // Handle Ceiling
+                    let ceil = toFeet(ceilRaw);
+                    if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
+                    const ceilStr = ceil > 0 ? ` [CEIL] ${ceil}ft` : '';
                     
                     // --- NEW RVR/VIS DETECTION LOGIC ---
                     const rvrRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_rvr`).value)||0;
@@ -538,6 +561,8 @@
                         if(mda>calcMDA) calcMDA = mda;
                     } else if(mdh>=minMDH) {
                         calcMDA = mda;
+                        // If mda input was empty/zero, but mdh is provided, calculate MDA
+                        if (calcMDA === 0) calcMDA = thrElev + mdhUsed;
                     } else if (mdh === 0) {
                         if (mda > 0) {
                             calcMDA = mda;
@@ -547,6 +572,8 @@
                             calcMDA = roundUpTo10(thrElev + mdhUsed);
                         }
                     }
+                    // Always round Non-Precision MDA to next 10
+                    if(calcMDA > 0) calcMDA = roundUpTo10(calcMDA);
 
                     let rvrFinal;
                     // --- New rule: If MDH > 1200 => always Non-CDFA, RVR = 5000m
@@ -590,9 +617,9 @@
                         visStr = `RVR: ${rvrFinal}m`;
                     }
 
-                    const res = `MDA: ${calcMDA}(${mdhUsed}), ${visStr}`;
-                    document.getElementById(`${proc.code}_${cat}_result`).innerText = mdaRaw||mdhRaw||rvrRaw?res:"";
-                    summary[proc.code][cat] = mdaRaw||mdhRaw||rvrRaw?res:"";
+                    const res = `MDA: ${calcMDA}(${mdhUsed}), ${visStr}${ceilStr}`;
+                    document.getElementById(`${proc.code}_${cat}_result`).innerText = mdaRaw||mdhRaw||rvrRaw||ceilRaw ? res : '';
+                    summary[proc.code][cat] = mdaRaw||mdhRaw||rvrRaw||ceilRaw ? res : '';
                     
                     // ** NEW: Check for Circling @ **
                     if (mdaRaw||mdhRaw||rvrRaw) {
