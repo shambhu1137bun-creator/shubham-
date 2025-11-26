@@ -38,6 +38,8 @@
             border-radius: 6px; 
             display: flex; 
             align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
         }
         .conversion-control label {
             font-weight: bold;
@@ -136,11 +138,15 @@
             </div>
         </div>
 
-        <!-- NEW CONVERSION CONTROL CHECKBOX -->
+        <!-- CONTROL CHECKBOXES -->
         <div class="conversion-control">
             <label for="meterToFeetConversion">
                 <input type="checkbox" id="meterToFeetConversion">
                 Apply Meter to Feet Conversion Rule (DA, DH, MDA, MDH inputs interpreted as Meters)
+            </label>
+            <label for="showCeilingInput">
+                <input type="checkbox" id="showCeilingInput">
+                Show Ceiling Inputs
             </label>
         </div>
 
@@ -267,8 +273,8 @@
                 if(mdhType) fields += `<input type="number" placeholder="MDH" id="${proc}_${cat}_mdh">`;
                 if(inputTypes.includes('RVR'))  fields += `<input type="number" placeholder="RVR" id="${proc}_${cat}_rvr">`;
                 if(inputTypes.includes('VIS'))  fields += `<input type="number" placeholder="VIS" id="${proc}_${cat}_vis" step="0.1">`;
-                // Add Ceiling Input
-                fields += `<input type="number" placeholder="Ceil" id="${proc}_${cat}_ceil">`;
+                // Add Ceiling Input (Hidden by default)
+                fields += `<input type="number" placeholder="Ceil" id="${proc}_${cat}_ceil" class="ceil-input" style="display:none;">`;
                 
                 return `<div class="cat-row"><div class="cat-label">CAT ${cat}</div>${fields}<div class="result" id="${proc}_${cat}_result"></div></div>`;
             }).join('');
@@ -320,6 +326,14 @@
             document.getElementById('noncdfaSubGroup').style.display = 'none';
             document.getElementById('noncdfa_ab').checked = false;
             document.getElementById('noncdfa_cd').checked = false;
+        });
+        
+        // Toggle Ceiling Input Visibility
+        document.getElementById('showCeilingInput').addEventListener('change', function(e) {
+            const display = e.target.checked ? 'inline-block' : 'none';
+            document.querySelectorAll('.ceil-input').forEach(el => {
+                el.style.display = display;
+            });
         });
 
         // --- MAIN LOGIC incl. ALL FEATURE/EXCEPTION RULES ---
@@ -387,17 +401,17 @@
                 const mda = toFeet(mdaRaw);
                 const mdh = toFeet(mdhRaw);
                 
-                // Handle Ceiling
-                let ceil = toFeet(ceilRaw);
-                if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
-                const ceilStr = ceil > 0 ? ` [CEIL] ${ceil}ft` : '';
-
                 const mdhUsed = Math.max(mdh, catMins[cat]);
                 const mdaCalc = roundUpTo10(adElev+mdhUsed);
                 // Ensure mda input is rounded if it exceeds calculated
                 const mdaFinal = roundUpTo10(Math.max(mda, mdaCalc));
                 const visFinal = Math.max(vis||0, visDefaults[cat]);
                 
+                // Handle Ceiling Logic: Show ONLY if Ceiling > MDH (mdhUsed)
+                let ceil = toFeet(ceilRaw);
+                if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
+                const ceilStr = (ceil > mdhUsed) ? ` [CEIL] ${ceil}ft` : '';
+
                 // Save baseline
                 stdCirclingValues[cat] = {
                     mdh: mdhUsed,
@@ -456,11 +470,6 @@
                     const dh = toFeet(dhRaw);
                     const ceilRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_ceil`).value)||0;
                     
-                    // Handle Ceiling
-                    let ceil = toFeet(ceilRaw);
-                    if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
-                    const ceilStr = ceil > 0 ? ` [CEIL] ${ceil}ft` : '';
-                    
                     // --- NEW RVR/VIS DETECTION LOGIC ---
                     const rvrRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_rvr`).value)||0;
                     let rvr = rvrRaw;
@@ -500,6 +509,11 @@
                     if (daFinal > stdCirclingValues[cat].mda) {
                         circlingLowerFound = true;
                     }
+                    
+                    // Handle Ceiling: Show ONLY if Ceiling > DH (dhRaised)
+                    let ceil = toFeet(ceilRaw);
+                    if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
+                    const ceilStr = (ceil > dhRaised) ? ` [CEIL] ${ceil}ft` : '';
 
                     // Format Result String based on input type
                     let visStr = '';
@@ -538,11 +552,6 @@
                     const mda = toFeet(mdaRaw);
                     const mdh = toFeet(mdhRaw);
                     
-                    // Handle Ceiling
-                    let ceil = toFeet(ceilRaw);
-                    if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
-                    const ceilStr = ceil > 0 ? ` [CEIL] ${ceil}ft` : '';
-                    
                     // --- NEW RVR/VIS DETECTION LOGIC ---
                     const rvrRaw = parseFloat(document.getElementById(`${proc.code}_${cat}_rvr`).value)||0;
                     let rvr = rvrRaw;
@@ -579,7 +588,13 @@
                     // --- New rule: If MDH > 1200 => always Non-CDFA, RVR = 5000m
                     if(mdhUsed > 1200) {
                         rvrFinal = 5000;
-                        const res = `MDA: ${calcMDA}(${mdhUsed}), RVR: 5000m (forced Non-CDFA: MDH > 1200)`;
+                        
+                        // Handle Ceiling: Show ONLY if Ceiling > MDH (mdhUsed)
+                        let ceil = toFeet(ceilRaw);
+                        if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
+                        const ceilStr = (ceil > mdhUsed) ? ` [CEIL] ${ceil}ft` : '';
+                        
+                        const res = `MDA: ${calcMDA}(${mdhUsed}), RVR: 5000m (forced Non-CDFA: MDH > 1200)${ceilStr}`;
                         document.getElementById(`${proc.code}_${cat}_result`).innerText = res;
                         summary[proc.code][cat] = res;
                         // Still check for Circling @ with forced values
@@ -608,6 +623,11 @@
                     if (calcMDA > stdCirclingValues[cat].mda) {
                         circlingLowerFound = true;
                     }
+                    
+                    // Handle Ceiling: Show ONLY if Ceiling > MDH (mdhUsed)
+                    let ceil = toFeet(ceilRaw);
+                    if(ceil > 0) ceil = Math.ceil(ceil/100)*100;
+                    const ceilStr = (ceil > mdhUsed) ? ` [CEIL] ${ceil}ft` : '';
 
                     // Format Result String
                     let visStr = '';
@@ -618,8 +638,8 @@
                     }
 
                     const res = `MDA: ${calcMDA}(${mdhUsed}), ${visStr}${ceilStr}`;
-                    document.getElementById(`${proc.code}_${cat}_result`).innerText = mdaRaw||mdhRaw||rvrRaw||ceilRaw ? res : '';
-                    summary[proc.code][cat] = mdaRaw||mdhRaw||rvrRaw||ceilRaw ? res : '';
+                    document.getElementById(`${proc.code}_${cat}_result`).innerText = mdaRaw||mdhRaw||rvrRaw||ceilRaw?res:"";
+                    summary[proc.code][cat] = mdaRaw||mdhRaw||rvrRaw||ceilRaw?res:"";
                     
                     // ** NEW: Check for Circling @ **
                     if (mdaRaw||mdhRaw||rvrRaw) {
@@ -662,6 +682,10 @@
             
             // Reset conversion checkbox (new addition)
             document.getElementById('meterToFeetConversion').checked = false;
+            
+            // Reset Show Ceiling checkbox and hide inputs
+            document.getElementById('showCeilingInput').checked = false;
+            document.querySelectorAll('.ceil-input').forEach(el => el.style.display = 'none');
 
 
             // Set calculator checkboxes: default is all precision checked, circling checked, others unchecked
